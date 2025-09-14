@@ -2,6 +2,7 @@ package cn.typesafe.km.service;
 
 import cn.typesafe.km.entity.Cluster;
 import cn.typesafe.km.service.dto.*;
+
 import org.apache.kafka.clients.admin.*;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.Resource;
+
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
@@ -20,15 +22,15 @@ import java.util.stream.Collectors;
  */
 @Service
 public class ConsumerGroupService {
-
+    
     @Resource
     private ClusterService clusterService;
-
+    
     public int countConsumerGroup(String clusterId) throws ExecutionException, InterruptedException {
         AdminClient adminClient = clusterService.getAdminClient(clusterId);
         return adminClient.listConsumerGroups().all().get().size();
     }
-
+    
     /**
      * 根据topic获取消费组
      *
@@ -38,10 +40,12 @@ public class ConsumerGroupService {
      * @throws ExecutionException
      * @throws InterruptedException
      */
-    public List<ConsumerGroup> consumerGroups(String topicName, String clusterId) throws ExecutionException, InterruptedException {
+    public List<ConsumerGroup> consumerGroups(String topicName, String clusterId)
+            throws ExecutionException, InterruptedException {
         AdminClient adminClient = clusterService.getAdminClient(clusterId);
         Collection<ConsumerGroupListing> consumerGroupListings = adminClient.listConsumerGroups().all().get();
-        List<String> groupIds = consumerGroupListings.stream().map(ConsumerGroupListing::groupId).collect(Collectors.toList());
+        List<String> groupIds = consumerGroupListings.stream().map(ConsumerGroupListing::groupId)
+                .collect(Collectors.toList());
         Map<String, ConsumerGroupDescription> groups = adminClient.describeConsumerGroups(groupIds).all().get();
         List<ConsumerGroup> consumerGroups = new ArrayList<>();
         for (ConsumerGroupListing consumerGroupListing : consumerGroupListings) {
@@ -62,34 +66,38 @@ public class ConsumerGroupService {
         // 统计消费组剩余多少未消费
         try (KafkaConsumer<String, String> kafkaConsumer = clusterService.createConsumer(clusterId)) {
             for (ConsumerGroup consumerGroup : consumerGroups) {
-                List<TopicOffset> topicOffsetList = getTopicOffsets(topicName, consumerGroup.getGroupId(), adminClient, kafkaConsumer);
+                List<TopicOffset> topicOffsetList = getTopicOffsets(topicName, consumerGroup.getGroupId(), adminClient,
+                        kafkaConsumer);
                 long lag = topicOffsetList.stream()
                         .mapToLong(x -> x.getEndOffset() - x.getConsumerOffset())
                         .sum();
                 consumerGroup.setLag(lag);
             }
         }
-
+        
         return consumerGroups;
     }
-
-    public List<TopicOffset> offset(String topicName, String groupId, String clusterId) throws ExecutionException, InterruptedException {
+    
+    public List<TopicOffset> offset(String topicName, String groupId, String clusterId)
+            throws ExecutionException, InterruptedException {
         AdminClient adminClient = clusterService.getAdminClient(clusterId);
         try (KafkaConsumer<String, String> kafkaConsumer = clusterService.createConsumer(clusterId)) {
-
+            
             return getTopicOffsets(topicName, groupId, adminClient, kafkaConsumer);
         }
     }
-
-    private List<TopicOffset> getTopicOffsets(String topicName, String groupId, AdminClient adminClient, KafkaConsumer<String, String> kafkaConsumer) throws InterruptedException, ExecutionException {
-        Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap = adminClient.listConsumerGroupOffsets(groupId)
+    
+    private List<TopicOffset> getTopicOffsets(String topicName, String groupId, AdminClient adminClient,
+            KafkaConsumer<String, String> kafkaConsumer) throws InterruptedException, ExecutionException {
+        Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap = adminClient.listConsumerGroupOffsets(
+                        groupId)
                 .partitionsToOffsetAndMetadata()
                 .get();
         Set<TopicPartition> topicPartitions = topicPartitionOffsetAndMetadataMap.keySet();
         Map<TopicPartition, Long> endOffsets = kafkaConsumer.endOffsets(topicPartitions);
         Map<TopicPartition, Long> beginningOffsets = kafkaConsumer.beginningOffsets(topicPartitions);
         List<TopicOffset> topicOffsets = new ArrayList<>();
-
+        
         topicPartitions.stream()
                 .filter(topicPartition -> Objects.equals(topicPartition.topic(), topicName))
                 .forEachOrdered(topicPartition -> {
@@ -98,7 +106,7 @@ public class ConsumerGroupService {
                     Long beginningOffset = beginningOffsets.get(topicPartition);
                     Long endOffset = endOffsets.get(topicPartition);
                     long offset = offsetAndMetadata.offset();
-
+                    
                     TopicOffset topicOffset = new TopicOffset();
                     topicOffset.setGroupId(groupId);
                     topicOffset.setTopic(topicName);
@@ -110,13 +118,17 @@ public class ConsumerGroupService {
                 });
         return topicOffsets;
     }
-
+    
     public void resetOffset(String topic, String groupId, String clusterId, ResetOffset resetOffset) {
         Cluster cluster = clusterService.findById(clusterId);
-        try (KafkaConsumer<String, String> kafkaConsumer = clusterService.createConsumer(cluster.getServers(), groupId, "earliest", cluster.getSecurityProtocol(), cluster.getSaslMechanism(), cluster.getAuthUsername(), cluster.getAuthPassword())) {
+        try (KafkaConsumer<String, String> kafkaConsumer = clusterService.createConsumer(cluster.getServers(),
+                groupId, "earliest", cluster.getSecurityProtocol(), cluster.getSaslMechanism(),
+                cluster.getAuthUsername(), cluster.getAuthPassword(), cluster.getSslTruststoreLocation(),
+                cluster.getSslTruststorePassword(), cluster.getSslKeystoreLocation(), cluster.getSslKeystorePassword(),
+                cluster.getSslKeyPassword(), cluster.getKerberosServiceName(), cluster.getKeytabFilePath())) {
             TopicPartition topicPartition = new TopicPartition(topic, resetOffset.getPartition());
             List<TopicPartition> topicPartitions = Collections.singletonList(topicPartition);
-
+            
             kafkaConsumer.assign(topicPartitions);
             if (Objects.equals("beginning", resetOffset.getSeek())) {
                 kafkaConsumer.seek(topicPartition, 0);
@@ -130,9 +142,10 @@ public class ConsumerGroupService {
             kafkaConsumer.commitSync();
         }
     }
-
-    public List<ConsumerGroup> consumerGroup(String clusterId, String filterGroupId) throws ExecutionException, InterruptedException {
-
+    
+    public List<ConsumerGroup> consumerGroup(String clusterId, String filterGroupId)
+            throws ExecutionException, InterruptedException {
+        
         AdminClient adminClient = clusterService.getAdminClient(clusterId);
         Collection<ConsumerGroupListing> consumerGroupListings = adminClient.listConsumerGroups().all().get();
         List<String> groupIds = consumerGroupListings.stream()
@@ -143,7 +156,7 @@ public class ConsumerGroupService {
                     .collect(Collectors.toList());
         }
         Map<String, ConsumerGroupDescription> groups = adminClient.describeConsumerGroups(groupIds).all().get();
-
+        
         return groupIds
                 .stream()
                 .map(groupId -> {
@@ -160,7 +173,7 @@ public class ConsumerGroupService {
                         consumerGroup.setTopics(topics);
                         return consumerGroup;
                     }
-                    Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap=null;
+                    Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap = null;
                     try {
                         topicPartitionOffsetAndMetadataMap = adminClient.listConsumerGroupOffsets(groupId)
                                 .partitionsToOffsetAndMetadata()
@@ -170,38 +183,44 @@ public class ConsumerGroupService {
                     } catch (ExecutionException e) {
                         throw new RuntimeException(e);
                     }
-                    consumerGroup.setTopics(topicPartitionOffsetAndMetadataMap.keySet().stream().map(TopicPartition::topic).collect(Collectors.toSet()));
+                    consumerGroup.setTopics(
+                            topicPartitionOffsetAndMetadataMap.keySet().stream().map(TopicPartition::topic)
+                                    .collect(Collectors.toSet()));
                     return consumerGroup;
                 })
                 .collect(Collectors.toList());
     }
-
+    
     public ConsumerGroupInfo info(String clusterId, String groupId) throws ExecutionException, InterruptedException {
         AdminClient adminClient = clusterService.getAdminClient(clusterId);
-        ConsumerGroupDescription consumerGroupDescription = adminClient.describeConsumerGroups(Collections.singletonList(groupId)).all().get().get(groupId);
+        ConsumerGroupDescription consumerGroupDescription = adminClient.describeConsumerGroups(
+                Collections.singletonList(groupId)).all().get().get(groupId);
         Set<String> topicNames = consumerGroupDescription
                 .members()
                 .stream()
                 .flatMap(x -> x.assignment().topicPartitions().stream())
                 .map(TopicPartition::topic)
                 .collect(Collectors.toSet());
-
+        
         ConsumerGroupInfo consumerGroupInfo = new ConsumerGroupInfo();
         consumerGroupInfo.setGroupId(groupId);
         consumerGroupInfo.setTopics(topicNames);
-
+        
         return consumerGroupInfo;
     }
-
+    
     public void delete(String clusterId, String groupId) throws ExecutionException, InterruptedException {
         AdminClient adminClient = clusterService.getAdminClient(clusterId);
         adminClient.deleteConsumerGroups(Collections.singletonList(groupId)).all().get();
     }
-
-    public List<ConsumerGroupDescribe> describe(String clusterId, String groupId) throws ExecutionException, InterruptedException {
+    
+    public List<ConsumerGroupDescribe> describe(String clusterId, String groupId)
+            throws ExecutionException, InterruptedException {
         AdminClient adminClient = clusterService.getAdminClient(clusterId);
-        ConsumerGroupDescription consumerGroupDescription = adminClient.describeConsumerGroups(Collections.singletonList(groupId)).all().get().get(groupId);
-        Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap = adminClient.listConsumerGroupOffsets(groupId)
+        ConsumerGroupDescription consumerGroupDescription = adminClient.describeConsumerGroups(
+                Collections.singletonList(groupId)).all().get().get(groupId);
+        Map<TopicPartition, OffsetAndMetadata> topicPartitionOffsetAndMetadataMap = adminClient.listConsumerGroupOffsets(
+                        groupId)
                 .partitionsToOffsetAndMetadata()
                 .get();
         Set<TopicPartition> topicPartitions = topicPartitionOffsetAndMetadataMap.keySet();
@@ -220,7 +239,8 @@ public class ConsumerGroupService {
                                         String consumerId = consumer.consumerId();
                                         String host = consumer.host();
                                         String clientId = consumer.clientId();
-                                        OffsetAndMetadata offsetAndMetadata = topicPartitionOffsetAndMetadataMap.get(topicPartition);
+                                        OffsetAndMetadata offsetAndMetadata = topicPartitionOffsetAndMetadataMap.get(
+                                                topicPartition);
                                         Long beginningOffset = beginningOffsets.get(topicPartition);
                                         Long endOffset = endOffsets.get(topicPartition);
                                         Long offset = null;
@@ -247,7 +267,7 @@ public class ConsumerGroupService {
                         })
                         .collect(Collectors.toList());
             }
-            List<ConsumerGroupDescribe> results=new ArrayList<>();
+            List<ConsumerGroupDescribe> results = new ArrayList<>();
             for (TopicPartition topicPartition : topicPartitionOffsetAndMetadataMap.keySet()) {
                 String topic = topicPartition.topic();
                 int partition = topicPartition.partition();
@@ -276,7 +296,7 @@ public class ConsumerGroupService {
                 //consumerGroupDescribe.setConsumerId(consumerId);
                 //consumerGroupDescribe.setHost(host);
                 //consumerGroupDescribe.setClientId(clientId);
-                results.add( consumerGroupDescribe);
+                results.add(consumerGroupDescribe);
             }
             return results;
         }

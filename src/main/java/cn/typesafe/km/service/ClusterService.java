@@ -51,7 +51,7 @@ public class ClusterService {
         return clusterRepository.findById(id).orElseThrow(() -> new NoSuchElementException("cluster 「" + id + "」does not exist"));
     }
 
-    private AdminClient createAdminClient(String servers, String securityProtocol, String saslMechanism, String authUsername, String authPassword) {
+    private AdminClient createAdminClient(String servers, String securityProtocol, String saslMechanism, String authUsername, String authPassword, String sslTruststoreLocation, String sslTruststorePassword, String sslKeystoreLocation, String sslKeystorePassword, String sslKeyPassword, String kerberosServiceName, String keytabFilePath) {
         Properties properties = new Properties();
         properties.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
         properties.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "30000");
@@ -64,17 +64,45 @@ public class ClusterService {
         }
 
         if (StringUtils.hasText(authUsername) && StringUtils.hasText(authPassword)) {
-            properties.put("sasl.jaas.config", MessageFormat.format("org.apache.kafka.common.security.scram.ScramLoginModule required username=\"{0}\" password=\"{1}\";", authUsername, authPassword));
+            if ("GSSAPI".equals(saslMechanism)) {
+                // Kerberos配置
+                String keytabPath = StringUtils.hasText(keytabFilePath) ? keytabFilePath : System.getProperty("java.io.tmpdir") + "/keytab";
+                properties.put("sasl.jaas.config", MessageFormat.format("com.sun.security.auth.module.Krb5LoginModule required useKeyTab=true storeKey=true keyTab=\"{0}\" principal=\"{1}\";", keytabPath, authUsername));
+                properties.put("sasl.kerberos.service.name", kerberosServiceName);
+            } else {
+                // SCRAM或其他SASL机制
+                properties.put("sasl.jaas.config", MessageFormat.format("org.apache.kafka.common.security.scram.ScramLoginModule required username=\"{0}\" password=\"{1}\";", authUsername, authPassword));
+            }
         }
+        
+        // SSL配置
+        if (StringUtils.hasText(sslTruststoreLocation)) {
+            properties.put("ssl.truststore.location", sslTruststoreLocation);
+        }
+        if (StringUtils.hasText(sslTruststorePassword)) {
+            properties.put("ssl.truststore.password", sslTruststorePassword);
+        }
+        if (StringUtils.hasText(sslKeystoreLocation)) {
+            properties.put("ssl.keystore.location", sslKeystoreLocation);
+        }
+        if (StringUtils.hasText(sslKeystorePassword)) {
+            properties.put("ssl.keystore.password", sslKeystorePassword);
+        }
+        if (StringUtils.hasText(sslKeyPassword)) {
+            properties.put("ssl.key.password", sslKeyPassword);
+        }
+
         return AdminClient.create(properties);
     }
 
     public KafkaConsumer<String, String> createConsumer(String clusterId) {
         Cluster cluster = findById(clusterId);
-        return createConsumer(cluster.getServers(), Constant.CONSUMER_GROUP_ID, "earliest", cluster.getSecurityProtocol(), cluster.getSaslMechanism(), cluster.getAuthUsername(), cluster.getAuthPassword());
+        return createConsumer(cluster.getServers(), Constant.CONSUMER_GROUP_ID, "earliest",
+                cluster.getSecurityProtocol(), cluster.getSaslMechanism(), cluster.getAuthUsername(),
+                cluster.getAuthPassword(), cluster.getSslTruststoreLocation(), cluster.getSslTruststorePassword(), cluster.getSslKeystoreLocation(), cluster.getSslKeystorePassword(), cluster.getSslKeyPassword(), cluster.getKerberosServiceName(), cluster.getKeytabFilePath());
     }
 
-    public KafkaConsumer<String, String> createConsumer(String servers, String groupId, String autoOffsetResetConfig, String securityProtocol, String saslMechanism, String authUsername, String authPassword) {
+    public KafkaConsumer<String, String> createConsumer(String servers, String groupId, String autoOffsetResetConfig, String securityProtocol, String saslMechanism, String authUsername, String authPassword, String sslTruststoreLocation, String sslTruststorePassword, String sslKeystoreLocation, String sslKeystorePassword, String sslKeyPassword, String kerberosServiceName, String keytabFilePath) {
         Properties properties = new Properties();
         properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
         properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "100");
@@ -90,12 +118,38 @@ public class ClusterService {
         }
 
         if (StringUtils.hasText(authUsername) && StringUtils.hasText(authPassword)) {
-            properties.put("sasl.jaas.config", MessageFormat.format("org.apache.kafka.common.security.scram.ScramLoginModule required username=\"{0}\" password=\"{1}\";", authUsername, authPassword));
+            if ("GSSAPI".equals(saslMechanism)) {
+                // Kerberos配置
+                String keytabPath = StringUtils.hasText(keytabFilePath) ? keytabFilePath : System.getProperty("java.io.tmpdir") + "/keytab";
+                properties.put("sasl.jaas.config", MessageFormat.format("com.sun.security.auth.module.Krb5LoginModule required useKeyTab=true storeKey=true keyTab=\"{0}\" principal=\"{1}\";", keytabPath, authUsername));
+                properties.put("sasl.kerberos.service.name", kerberosServiceName);
+            } else {
+                // SCRAM或其他SASL机制
+                properties.put("sasl.jaas.config", MessageFormat.format("org.apache.kafka.common.security.scram.ScramLoginModule required username=\"{0}\" password=\"{1}\";", authUsername, authPassword));
+            }
         }
+        
+        // SSL配置
+        if (StringUtils.hasText(sslTruststoreLocation)) {
+            properties.put("ssl.truststore.location", sslTruststoreLocation);
+        }
+        if (StringUtils.hasText(sslTruststorePassword)) {
+            properties.put("ssl.truststore.password", sslTruststorePassword);
+        }
+        if (StringUtils.hasText(sslKeystoreLocation)) {
+            properties.put("ssl.keystore.location", sslKeystoreLocation);
+        }
+        if (StringUtils.hasText(sslKeystorePassword)) {
+            properties.put("ssl.keystore.password", sslKeystorePassword);
+        }
+        if (StringUtils.hasText(sslKeyPassword)) {
+            properties.put("ssl.key.password", sslKeyPassword);
+        }
+
         return new KafkaConsumer<>(properties, new StringDeserializer(), new StringDeserializer());
     }
 
-    public KafkaProducer<String, String> createProducer(String servers, String securityProtocol, String saslMechanism, String authUsername, String authPassword) {
+    public KafkaProducer<String, String> createProducer(String servers, String securityProtocol, String saslMechanism, String authUsername, String authPassword, String sslTruststoreLocation, String sslTruststorePassword, String sslKeystoreLocation, String sslKeystorePassword, String sslKeyPassword, String kerberosServiceName, String keytabFilePath) {
         Properties properties = new Properties();
         properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, servers);
         if (StringUtils.hasText(securityProtocol)) {
@@ -106,19 +160,45 @@ public class ClusterService {
         }
 
         if (StringUtils.hasText(authUsername) && StringUtils.hasText(authPassword)) {
-            properties.put("sasl.jaas.config", MessageFormat.format("org.apache.kafka.common.security.scram.ScramLoginModule required username=\"{0}\" password=\"{1}\";", authUsername, authPassword));
+            if ("GSSAPI".equals(saslMechanism)) {
+                // Kerberos配置
+                String keytabPath = StringUtils.hasText(keytabFilePath) ? keytabFilePath : System.getProperty("java.io.tmpdir") + "/keytab";
+                properties.put("sasl.jaas.config", MessageFormat.format("com.sun.security.auth.module.Krb5LoginModule required useKeyTab=true storeKey=true keyTab=\"{0}\" principal=\"{1}\";", keytabPath, authUsername));
+                properties.put("sasl.kerberos.service.name", kerberosServiceName);
+            } else {
+                // SCRAM或其他SASL机制
+                properties.put("sasl.jaas.config", MessageFormat.format("org.apache.kafka.common.security.scram.ScramLoginModule required username=\"{0}\" password=\"{1}\";", authUsername, authPassword));
+            }
         }
+        
+        // SSL配置
+        if (StringUtils.hasText(sslTruststoreLocation)) {
+            properties.put("ssl.truststore.location", sslTruststoreLocation);
+        }
+        if (StringUtils.hasText(sslTruststorePassword)) {
+            properties.put("ssl.truststore.password", sslTruststorePassword);
+        }
+        if (StringUtils.hasText(sslKeystoreLocation)) {
+            properties.put("ssl.keystore.location", sslKeystoreLocation);
+        }
+        if (StringUtils.hasText(sslKeystorePassword)) {
+            properties.put("ssl.keystore.password", sslKeystorePassword);
+        }
+        if (StringUtils.hasText(sslKeyPassword)) {
+            properties.put("ssl.key.password", sslKeyPassword);
+        }
+
         return new KafkaProducer<>(properties, new StringSerializer(), new StringSerializer());
     }
 
-    public AdminClient getAdminClient(String id, String servers, String securityProtocol, String saslMechanism, String authUsername, String authPassword) {
+    public AdminClient getAdminClient(String id, String servers, String securityProtocol, String saslMechanism, String authUsername, String authPassword, String sslTruststoreLocation, String sslTruststorePassword, String sslKeystoreLocation, String sslKeystorePassword, String sslKeyPassword, String kerberosServiceName, String keytabFilePath) {
         AdminClient adminClient = clients.get(id);
         if (adminClient == null) {
             lock.lock();
             try {
                 adminClient = clients.get(id);
                 if (adminClient == null) {
-                    adminClient = createAdminClient(servers, securityProtocol, saslMechanism, authUsername, authPassword);
+                    adminClient = createAdminClient(servers, securityProtocol, saslMechanism, authUsername, authPassword, sslTruststoreLocation, sslTruststorePassword, sslKeystoreLocation, sslKeystorePassword, sslKeyPassword, kerberosServiceName, keytabFilePath);
                     clients.put(id, adminClient);
                 }
             } finally {
@@ -136,7 +216,7 @@ public class ClusterService {
                 adminClient = clients.get(id);
                 if (adminClient == null) {
                     Cluster cluster = findById(id);
-                    adminClient = createAdminClient(cluster.getServers(), cluster.getSecurityProtocol(), cluster.getSaslMechanism(), cluster.getAuthUsername(), cluster.getAuthPassword());
+                    adminClient = createAdminClient(cluster.getServers(), cluster.getSecurityProtocol(), cluster.getSaslMechanism(), cluster.getAuthUsername(), cluster.getAuthPassword(), cluster.getSslTruststoreLocation(), cluster.getSslTruststorePassword(), cluster.getSslKeystoreLocation(), cluster.getSslKeystorePassword(), cluster.getSslKeyPassword(), cluster.getKerberosServiceName(), cluster.getKeytabFilePath());
                     clients.put(id, adminClient);
                 }
             } finally {
@@ -150,6 +230,9 @@ public class ClusterService {
     public void create(Cluster cluster) throws ExecutionException, InterruptedException {
         String uuid = ID.uuid();
         for (String server : cluster.getServers().split(",")) {
+            if (!StringUtils.hasText(server)) {
+                continue;
+            }
             String[] split = server.split(":");
             String host = split[0];
             int port = Integer.parseInt(split[1]);
@@ -159,7 +242,11 @@ public class ClusterService {
             }
         }
 
-        AdminClient adminClient = getAdminClient(uuid, cluster.getServers(), cluster.getSecurityProtocol(), cluster.getSaslMechanism(), cluster.getAuthUsername(), cluster.getAuthPassword());
+        AdminClient adminClient = getAdminClient(uuid, cluster.getServers(), cluster.getSecurityProtocol(),
+                cluster.getSaslMechanism(), cluster.getAuthUsername(), cluster.getAuthPassword(),
+                cluster.getSslTruststoreLocation(), cluster.getSslTruststorePassword(),
+                cluster.getSslKeystoreLocation(), cluster.getSslKeystorePassword(), cluster.getSslKeyPassword(),
+                cluster.getKerberosServiceName(), cluster.getKeytabFilePath());
         String controller = adminClient.describeCluster().controller().get().host();
 
         cluster.setId(uuid);

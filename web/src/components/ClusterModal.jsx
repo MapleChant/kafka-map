@@ -1,6 +1,8 @@
 import React from 'react';
-import {Form, Input, Modal, Select} from "antd/lib/index";
+import {Form, Input, Modal, Select, Upload} from "antd/lib/index";
 import {FormattedMessage} from "react-intl";
+import {UploadOutlined} from "@ant-design/icons";
+import {server} from "../common/env";
 
 const {TextArea} = Input;
 
@@ -63,7 +65,7 @@ const ClusterModal = ({title, handleOk, handleCancel, confirmLoading, model}) =>
                     <Select allowClear>
                         <Select.Option value="PLAINTEXT">PLAINTEXT</Select.Option>
                         <Select.Option value="SSL">SSL</Select.Option>
-                        <Select.Option value="SASL_PLAINTEXT">SASL_PLAINTEXT</Select.Option>
+                <Select.Option value="SASL_PLAINTEXT">SASL_PLAINTEXT</Select.Option>
                         <Select.Option value="SASL_SSL">SASL_SSL</Select.Option>
                     </Select>
                 </Form.Item>
@@ -84,6 +86,65 @@ const ClusterModal = ({title, handleOk, handleCancel, confirmLoading, model}) =>
 
                 <Form.Item label={<FormattedMessage id="password"/>} name='authPassword'>
                     <Input placeholder="" maxLength={200}/>
+                </Form.Item>
+
+                {/* 修改SSL和Kerberos相关配置字段为文件上传 */}
+                <Form.Item label="SSL Truststore" name='sslTruststoreFile'>
+                    <Upload maxCount={1} action={`${server}/files/upload`} 
+                            onChange={(info) => {
+                                if (info.file.status === 'done') {
+                                    const path = info.file.response?.path;
+                                    if (path) {
+                                        form.setFieldsValue({ sslTruststoreFile: path });
+                                    }
+                                }
+                            }}>
+                        <UploadOutlined/> Upload Truststore File
+                    </Upload>
+                </Form.Item>
+
+                <Form.Item label="SSL Truststore Password" name='sslTruststorePassword'>
+                    <Input placeholder="" maxLength={200}/>
+                </Form.Item>
+
+                <Form.Item label="SSL Keystore" name='sslKeystoreFile'>
+                    <Upload maxCount={1} action={`${server}/files/upload`}
+                            onChange={(info) => {
+                                if (info.file.status === 'done') {
+                                    const path = info.file.response?.path;
+                                    if (path) {
+                                        form.setFieldsValue({ sslKeystoreFile: path });
+                                    }
+                                }
+                            }}>
+                        <UploadOutlined/> Upload Keystore File
+                    </Upload>
+                </Form.Item>
+
+                <Form.Item label="SSL Keystore Password" name='sslKeystorePassword'>
+                    <Input placeholder="" maxLength={200}/>
+                </Form.Item>
+
+                <Form.Item label="SSL Key Password" name='sslKeyPassword'>
+                    <Input placeholder="" maxLength={200}/>
+                </Form.Item>
+
+                <Form.Item label="Kerberos Service Name" name='kerberosServiceName'>
+                    <Input placeholder="" maxLength={500}/>
+                </Form.Item>
+
+                <Form.Item label="Keytab File" name='keytabFile'>
+                    <Upload maxCount={1} action={`${server}/files/upload`}
+                            onChange={(info) => {
+                                if (info.file.status === 'done') {
+                                    const path = info.file.response?.path;
+                                    if (path) {
+                                        form.setFieldsValue({ keytabFile: path });
+                                    }
+                                }
+                            }}>
+                        <UploadOutlined/> Upload Keytab File
+                    </Upload>
                 </Form.Item>
             </Form>
         </Modal>

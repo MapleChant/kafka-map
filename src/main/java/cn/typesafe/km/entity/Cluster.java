@@ -36,6 +36,23 @@ public class Cluster {
     private String authUsername;
     @Column(length = 200)
     private String authPassword;
+    
+    // 新增SSL和Kerberos相关配置字段
+    @Column(length = 500)
+    private String sslTruststoreLocation;
+    @Column(length = 200)
+    private String sslTruststorePassword;
+    @Column(length = 500)
+    private String sslKeystoreLocation;
+    @Column(length = 200)
+    private String sslKeystorePassword;
+    @Column(length = 200)
+    private String sslKeyPassword;
+    @Column(length = 500)
+    private String kerberosServiceName;
+    // 新增keytab文件路径配置字段
+    @Column(length = 500)
+    private String keytabFilePath;
 
     @Transient
     private Integer topicCount;
